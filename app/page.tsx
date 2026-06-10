@@ -4,16 +4,22 @@ import { useState, useRef, useCallback } from "react";
 
 interface JuiceboxResult {
   id: string;
-  name: string;
+  firstName: string;
+  lastName: string;
   title: string;
   company: string;
+  location: string;
+  school: string;
   matchRate: number;
 }
 
 interface ResolvedRow {
-  name: string;
+  firstName: string;
+  lastName: string;
   title: string;
   company: string;
+  location: string;
+  school: string;
   matchRate: number;
   linkedinUrl: string;
 }
@@ -27,11 +33,19 @@ function parseJuiceboxJSON(raw: string): JuiceboxResult[] {
     .filter((r: Record<string, unknown>) => r.id && typeof r.id === "string")
     .map((r: Record<string, unknown>) => {
       const p = (r.profileDetails || {}) as Record<string, unknown>;
+      const fullName = ((p.full_name as string) || "").trim();
+      const parts = fullName.split(/\s+/);
+      const firstName = parts[0] || "";
+      const lastName = parts.slice(1).join(" ") || "";
+      const school = (p.last_school as Record<string, unknown>)?.name as string || "";
       return {
         id: r.id as string,
-        name: (p.full_name as string) || "",
+        firstName: firstName.charAt(0).toUpperCase() + firstName.slice(1),
+        lastName: lastName.split(" ").map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(" "),
         title: (p.job_title as string) || "",
         company: (p.job_company_name as string) || "",
+        location: (p.location_name as string) || "",
+        school,
         matchRate: (r.matchRateRounded as number) || (r.matchRate as number) || 0,
       };
     });
@@ -42,11 +56,11 @@ function randomBetween(min: number, max: number) {
 }
 
 function toCSV(rows: ResolvedRow[]): string {
-  const header = "Name,LinkedIn,Title,Company,Match %";
+  const header = "First Name,Last Name,LinkedIn,Title,Company,Location,School,Match %";
   const escape = (s: string) => `"${s.replace(/"/g, '""')}"`;
   const lines = rows.map(
     (r) =>
-      `${escape(r.name)},${escape(r.linkedinUrl)},${escape(r.title)},${escape(r.company)},${r.matchRate}%`
+      `${escape(r.firstName)},${escape(r.lastName)},${escape(r.linkedinUrl)},${escape(r.title)},${escape(r.company)},${escape(r.location)},${escape(r.school)},${r.matchRate}%`
   );
   return [header, ...lines].join("\n");
 }
@@ -120,26 +134,32 @@ export default function Home() {
         const url = data.linkedinUrl || "";
 
         resolved.push({
-          name: entry.name,
+          firstName: entry.firstName,
+          lastName: entry.lastName,
           title: entry.title,
           company: entry.company,
+          location: entry.location,
+          school: entry.school,
           matchRate: entry.matchRate,
           linkedinUrl: url,
         });
 
         setLog((prev) => [
           ...prev,
-          `[${i + 1}/${total}] ${entry.name} → ${url || "sin URL"}`,
+          `[${i + 1}/${total}] ${entry.firstName} ${entry.lastName} → ${url || "sin URL"}`,
         ]);
       } catch {
         resolved.push({
-          name: entry.name,
+          firstName: entry.firstName,
+          lastName: entry.lastName,
           title: entry.title,
           company: entry.company,
+          location: entry.location,
+          school: entry.school,
           matchRate: entry.matchRate,
           linkedinUrl: "",
         });
-        setLog((prev) => [...prev, `[${i + 1}/${total}] ✗ Error: ${entry.name}`]);
+        setLog((prev) => [...prev, `[${i + 1}/${total}] ✗ Error: ${entry.firstName} ${entry.lastName}`]);
       }
 
       setProgress({ done: i + 1, total });
