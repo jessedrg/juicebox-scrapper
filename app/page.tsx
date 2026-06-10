@@ -60,6 +60,8 @@ export default function Home() {
   const [progress, setProgress] = useState({ done: 0, total: 0 });
   const [log, setLog] = useState<string[]>([]);
   const [minMatch, setMinMatch] = useState(80);
+  const [inputMode, setInputMode] = useState<"file" | "paste">("file");
+  const [rawJson, setRawJson] = useState("");
   const abortRef = useRef(false);
 
   const handleFile = useCallback((file: File) => {
@@ -76,6 +78,19 @@ export default function Home() {
       }
     };
     reader.readAsText(file);
+  }, []);
+
+  const handlePaste = useCallback((text: string) => {
+    setRawJson(text);
+    try {
+      const parsed = parseJuiceboxJSON(text);
+      setEntries(parsed);
+      setFileName("JSON pegado");
+      setLog([`✓ ${parsed.length} perfiles encontrados`]);
+    } catch {
+      setLog(["✗ Error al parsear. Asegúrate de pegar JSON válido de Juicebox."]);
+      setEntries([]);
+    }
   }, []);
 
   const filteredEntries = entries.filter((e) => e.matchRate >= minMatch);
@@ -210,48 +225,86 @@ export default function Home() {
           )}
         </div>
 
-        {/* File upload */}
+        {/* Input mode tabs */}
         <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
-          Archivo JSON de Juicebox
+          JSON de Juicebox
         </label>
-        <div
-          onDragOver={(e) => {
-            e.preventDefault();
-            e.currentTarget.classList.add("border-violet-500");
-          }}
-          onDragLeave={(e) => e.currentTarget.classList.remove("border-violet-500")}
-          onDrop={(e) => {
-            e.preventDefault();
-            e.currentTarget.classList.remove("border-violet-500");
-            if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
-          }}
-          className={`relative border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition mb-5 ${
-            entries.length > 0
-              ? "border-emerald-500/50 bg-emerald-500/5"
-              : "border-slate-700 hover:border-violet-500"
-          }`}
-        >
-          <input
-            type="file"
-            accept=".json"
-            onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
-            className="absolute inset-0 opacity-0 cursor-pointer"
-          />
-          {entries.length > 0 ? (
-            <>
-              <div className="text-2xl mb-1">✓</div>
-              <div className="text-emerald-400 font-semibold">{fileName}</div>
-              <div className="text-slate-500 text-sm">{entries.length} perfiles</div>
-            </>
-          ) : (
-            <>
-              <div className="text-2xl mb-1">📁</div>
-              <div className="text-slate-500 text-sm">
-                Arrastra aquí o haz clic para seleccionar
-              </div>
-            </>
-          )}
+        <div className="flex gap-1 mb-3 bg-slate-950 rounded-lg p-1">
+          <button
+            onClick={() => setInputMode("file")}
+            className={`flex-1 py-1.5 text-xs font-medium rounded-md transition ${
+              inputMode === "file"
+                ? "bg-slate-800 text-slate-200"
+                : "text-slate-500 hover:text-slate-300"
+            }`}
+          >
+            Subir archivo
+          </button>
+          <button
+            onClick={() => setInputMode("paste")}
+            className={`flex-1 py-1.5 text-xs font-medium rounded-md transition ${
+              inputMode === "paste"
+                ? "bg-slate-800 text-slate-200"
+                : "text-slate-500 hover:text-slate-300"
+            }`}
+          >
+            Pegar JSON
+          </button>
         </div>
+
+        {inputMode === "file" ? (
+          <div
+            onDragOver={(e) => {
+              e.preventDefault();
+              e.currentTarget.classList.add("border-violet-500");
+            }}
+            onDragLeave={(e) => e.currentTarget.classList.remove("border-violet-500")}
+            onDrop={(e) => {
+              e.preventDefault();
+              e.currentTarget.classList.remove("border-violet-500");
+              if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+            }}
+            className={`relative border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition mb-5 ${
+              entries.length > 0 && inputMode === "file"
+                ? "border-emerald-500/50 bg-emerald-500/5"
+                : "border-slate-700 hover:border-violet-500"
+            }`}
+          >
+            <input
+              type="file"
+              accept=".json"
+              onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
+              className="absolute inset-0 opacity-0 cursor-pointer"
+            />
+            {entries.length > 0 ? (
+              <>
+                <div className="text-2xl mb-1">✓</div>
+                <div className="text-emerald-400 font-semibold">{fileName}</div>
+                <div className="text-slate-500 text-sm">{entries.length} perfiles</div>
+              </>
+            ) : (
+              <>
+                <div className="text-2xl mb-1">📁</div>
+                <div className="text-slate-500 text-sm">
+                  Arrastra aquí o haz clic para seleccionar
+                </div>
+              </>
+            )}
+          </div>
+        ) : (
+          <div className="mb-5">
+            <textarea
+              value={rawJson}
+              onChange={(e) => handlePaste(e.target.value)}
+              placeholder='{"results": [...]}'
+              rows={6}
+              className="w-full px-3 py-2.5 bg-slate-950 border border-slate-700 rounded-lg text-xs font-mono text-slate-300 focus:outline-none focus:border-violet-500 transition resize-y"
+            />
+            {entries.length > 0 && (
+              <p className="text-xs text-emerald-400 mt-1">✓ {entries.length} perfiles encontrados</p>
+            )}
+          </div>
+        )}
 
         {/* Run button */}
         <button
