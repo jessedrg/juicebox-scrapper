@@ -21,9 +21,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Missing id or token" }, { status: 400 });
   }
 
-  // Random human-like delay between 800ms and 2500ms
-  await sleep(randomBetween(800, 2500));
-
   try {
     const ua = USER_AGENTS[randomBetween(0, USER_AGENTS.length - 1)];
 

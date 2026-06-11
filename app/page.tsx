@@ -76,7 +76,9 @@ export default function Home() {
   const [minMatch, setMinMatch] = useState(80);
   const [inputMode, setInputMode] = useState<"file" | "paste">("file");
   const [rawJson, setRawJson] = useState("");
+  const [delayMs, setDelayMs] = useState(500);
   const abortRef = useRef(false);
+  const delayRef = useRef(500);
 
   const handleFile = useCallback((file: File) => {
     setFileName(file.name);
@@ -109,11 +111,20 @@ export default function Home() {
 
   const filteredEntries = entries.filter((e) => e.matchRate >= minMatch);
 
+  const updateDelay = (val: number) => {
+    setDelayMs(val);
+    delayRef.current = val;
+  };
+
+  const stop = () => {
+    abortRef.current = true;
+  };
+
   const run = async () => {
     if (!token || filteredEntries.length === 0) return;
     setRunning(true);
     setResults([]);
-    setLog([`Iniciando resolución (${filteredEntries.length} perfiles con match ≥ ${minMatch}%)...`]);
+    setLog([`Iniciando resolución (${filteredEntries.length} perfiles, delay ${delayMs}ms)...`]);
     abortRef.current = false;
 
     const total = filteredEntries.length;
@@ -121,7 +132,10 @@ export default function Home() {
     const resolved: ResolvedRow[] = [];
 
     for (let i = 0; i < total; i++) {
-      if (abortRef.current) break;
+      if (abortRef.current) {
+        setLog((prev: string[]) => [...prev, `\n⏹ Detenido en ${i}/${total}`]);
+        break;
+      }
       const entry = filteredEntries[i];
 
       try {
@@ -144,7 +158,7 @@ export default function Home() {
           linkedinUrl: url,
         });
 
-        setLog((prev) => [
+        setLog((prev: string[]) => [
           ...prev,
           `[${i + 1}/${total}] ${entry.firstName} ${entry.lastName} → ${url || "sin URL"}`,
         ]);
@@ -159,26 +173,25 @@ export default function Home() {
           matchRate: entry.matchRate,
           linkedinUrl: "",
         });
-        setLog((prev) => [...prev, `[${i + 1}/${total}] ✗ Error: ${entry.firstName} ${entry.lastName}`]);
+        setLog((prev: string[]) => [...prev, `[${i + 1}/${total}] ✗ Error: ${entry.firstName} ${entry.lastName}`]);
       }
 
       setProgress({ done: i + 1, total });
       setResults([...resolved]);
 
-      // Extra random pause every 8-15 requests to mimic human browsing
-      const burstSize = randomBetween(8, 15);
-      if (i > 0 && i % burstSize === 0) {
-        const pause = randomBetween(3000, 6000);
-        setLog((prev: string[]) => [...prev, `⏸ Pausa de ${(pause / 1000).toFixed(1)}s...`]);
-        await new Promise((r) => setTimeout(r, pause));
-      }
+      // Wait using the current delay (can be changed live)
+      const jitter = randomBetween(-100, 100);
+      const wait = Math.max(50, delayRef.current + jitter);
+      await new Promise((r) => setTimeout(r, wait));
     }
 
     setRunning(false);
-    setLog((prev) => [
-      ...prev,
-      `\n✓ Listo — ${resolved.filter((r) => r.linkedinUrl).length}/${total} URLs resueltas`,
-    ]);
+    if (!abortRef.current) {
+      setLog((prev: string[]) => [
+        ...prev,
+        `\n✓ Listo — ${resolved.filter((r: ResolvedRow) => r.linkedinUrl).length}/${total} URLs resueltas`,
+      ]);
+    }
   };
 
   const download = () => {
@@ -326,16 +339,45 @@ export default function Home() {
           </div>
         )}
 
-        {/* Run button */}
-        <button
-          onClick={run}
-          disabled={running || !token || filteredEntries.length === 0}
-          className="w-full py-3 bg-gradient-to-r from-violet-600 to-blue-600 text-white font-semibold rounded-xl hover:opacity-90 active:scale-[0.98] transition disabled:opacity-30 disabled:cursor-not-allowed"
-        >
-          {running
-            ? `Resolviendo... ${pct}%`
-            : `Resolver ${filteredEntries.length} LinkedIn URLs`}
-        </button>
+        {/* Speed control */}
+        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+          Velocidad (delay entre requests)
+        </label>
+        <div className="flex items-center gap-3 mb-5">
+          <span className="text-xs text-emerald-400 w-12">Rápido</span>
+          <input
+            type="range"
+            min={0}
+            max={3000}
+            step={50}
+            value={delayMs}
+            onChange={(e) => updateDelay(Number(e.target.value))}
+            className="flex-1 accent-violet-500"
+          />
+          <span className="text-xs text-amber-400 w-10">Lento</span>
+          <span className="text-xs text-slate-400 w-16 text-right font-mono">{delayMs}ms</span>
+        </div>
+
+        {/* Run / Stop buttons */}
+        <div className="flex gap-2">
+          <button
+            onClick={run}
+            disabled={running || !token || filteredEntries.length === 0}
+            className="flex-1 py-3 bg-gradient-to-r from-violet-600 to-blue-600 text-white font-semibold rounded-xl hover:opacity-90 active:scale-[0.98] transition disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            {running
+              ? `Resolviendo... ${pct}%`
+              : `Resolver ${filteredEntries.length} LinkedIn URLs`}
+          </button>
+          {running && (
+            <button
+              onClick={stop}
+              className="px-5 py-3 bg-red-600 text-white font-semibold rounded-xl hover:bg-red-500 active:scale-[0.98] transition"
+            >
+              Parar
+            </button>
+          )}
+        </div>
 
         {/* Progress */}
         {progress.total > 0 && (
@@ -372,13 +414,13 @@ export default function Home() {
           </div>
         )}
 
-        {/* Download */}
-        {results.length > 0 && !running && (
+        {/* Download — available during and after run */}
+        {results.length > 0 && (
           <button
             onClick={download}
             className="w-full mt-4 py-3 bg-emerald-600 text-white font-semibold rounded-xl hover:bg-emerald-500 active:scale-[0.98] transition"
           >
-            Descargar CSV ({results.filter((r) => r.linkedinUrl).length} URLs)
+            Descargar CSV ({results.filter((r: ResolvedRow) => r.linkedinUrl).length} URLs)
           </button>
         )}
       </div>
